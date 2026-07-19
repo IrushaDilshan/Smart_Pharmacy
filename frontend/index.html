@@ -143,6 +143,7 @@
                                     <th class="px-6 py-4">Price</th>
                                     <th class="px-6 py-4">Stock</th>
                                     <th class="px-6 py-4">Status</th>
+                                    <th class="px-6 py-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="inventory-tbody" class="divide-y divide-slate-100 bg-white/30 text-sm">
@@ -199,26 +200,71 @@
             return '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">In Stock</span>';
         }
 
+        let currentMedicines = [];
+        let editMedicineId = null;
+
         // Fetch and display medicines
         async function fetchMedicines() {
             tableLoading.classList.remove('hidden');
             tableLoading.classList.add('flex');
-            tbody.innerHTML = '';
-            emptyState.classList.add('hidden');
-
+            
             try {
-                const response = await fetch(`${API_BASE_URL}/medicines/`);
+                const response = await fetch(`${API_BASE_URL}/medicines`);
                 if (!response.ok) throw new Error('Failed to fetch inventory');
                 
-                const data = await response.json();
-                
-                if (data.length === 0) {
-                    emptyState.classList.remove('hidden');
-                    emptyState.classList.add('flex');
-                } else {
-                    data.forEach(med => {
-                        const tr = document.createElement('tr');
-                        tr.className = 'hover:bg-slate-50 transition-colors group';
+                currentMedicines = await response.json();
+                renderTable();
+            } catch (error) {
+                console.error(error);
+                showMessage('We encountered an error loading the inventory. Please ensure the backend is running.', 'error');
+            } finally {
+                // Add slight delay for smoother transition
+                setTimeout(() => {
+                    tableLoading.classList.add('hidden');
+                    tableLoading.classList.remove('flex');
+                }, 300);
+            }
+        }
+
+        function renderTable() {
+            tbody.innerHTML = '';
+            
+            if (currentMedicines.length === 0) {
+                emptyState.classList.remove('hidden');
+                emptyState.classList.add('flex');
+            } else {
+                emptyState.classList.add('hidden');
+                currentMedicines.forEach(med => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition-colors group';
+                    
+                    if (editMedicineId === med.id) {
+                        tr.innerHTML = `
+                            <td class="px-6 py-4 whitespace-nowrap text-slate-500 font-medium">#${med.id}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex flex-col gap-1.5">
+                                    <input type="text" id="edit-name-${med.id}" value="${med.name}" class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm font-medium text-slate-900 focus:border-primary focus:ring-primary focus:outline-none" placeholder="Name">
+                                    <input type="text" id="edit-desc-${med.id}" value="${med.description || ''}" class="w-full rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-500 focus:border-primary focus:ring-primary focus:outline-none" placeholder="Description">
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-slate-700 font-medium">
+                                <div class="flex items-center gap-1">
+                                    <span class="text-slate-500">$</span>
+                                    <input type="number" step="0.01" id="edit-price-${med.id}" value="${med.price}" class="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-primary focus:ring-primary focus:outline-none" placeholder="Price">
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-slate-700">
+                                <input type="number" id="edit-stock-${med.id}" value="${med.stock_quantity}" class="w-20 rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-primary focus:ring-primary focus:outline-none" placeholder="Stock">
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                ${getStatusBadge(med.stock_quantity)}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button onclick="saveMedicine(${med.id})" class="text-emerald-600 hover:text-emerald-900 mr-3 transition-colors">Save</button>
+                                <button onclick="cancelEdit()" class="text-slate-500 hover:text-slate-700 transition-colors">Cancel</button>
+                            </td>
+                        `;
+                    } else {
                         tr.innerHTML = `
                             <td class="px-6 py-4 whitespace-nowrap text-slate-500 font-medium">#${med.id}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -230,19 +276,80 @@
                             <td class="px-6 py-4 whitespace-nowrap">
                                 ${getStatusBadge(med.stock_quantity)}
                             </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button onclick="startEdit(${med.id})" class="text-primary hover:text-indigo-900 mr-3 transition-colors">Edit</button>
+                                <button onclick="deleteMedicine(${med.id})" class="text-red-600 hover:text-red-900 transition-colors">Delete</button>
+                            </td>
                         `;
-                        tbody.appendChild(tr);
-                    });
+                    }
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        function startEdit(id) {
+            editMedicineId = id;
+            renderTable();
+        }
+
+        function cancelEdit() {
+            editMedicineId = null;
+            renderTable();
+        }
+
+        async function saveMedicine(id) {
+            const name = document.getElementById(`edit-name-${id}`).value;
+            const description = document.getElementById(`edit-desc-${id}`).value;
+            const price = parseFloat(document.getElementById(`edit-price-${id}`).value);
+            const stock_quantity = parseInt(document.getElementById(`edit-stock-${id}`).value);
+
+            if (!name || isNaN(price) || isNaN(stock_quantity)) {
+                showMessage('Please fill all required fields correctly.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/medicines/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, price, stock_quantity })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.detail || 'Failed to update medicine');
                 }
+
+                showMessage('Medicine updated successfully.');
+                editMedicineId = null;
+                fetchMedicines();
             } catch (error) {
                 console.error(error);
-                showMessage('We encountered an error loading the inventory. Please ensure the backend is running.', 'error');
-            } finally {
-                // Add slight delay for smoother transition
-                setTimeout(() => {
-                    tableLoading.classList.add('hidden');
-                    tableLoading.classList.remove('flex');
-                }, 300);
+                showMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Delete medicine
+        async function deleteMedicine(id) {
+            if (!confirm('Are you sure you want to delete this medicine? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/medicines/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.detail || 'Failed to delete medicine');
+                }
+
+                showMessage('Medicine deleted successfully.');
+                fetchMedicines();
+            } catch (error) {
+                console.error(error);
+                showMessage(`Error: ${error.message}`, 'error');
             }
         }
 
@@ -263,7 +370,7 @@
             };
 
             try {
-                const response = await fetch(`${API_BASE_URL}/medicines/`, {
+                const response = await fetch(`${API_BASE_URL}/medicines`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)

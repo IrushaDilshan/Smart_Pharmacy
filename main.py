@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base
 from app.api.v1.endpoints import auth, medicines, orders, cart, ai
 
@@ -7,6 +8,15 @@ Base.metadata.create_all(bind=engine)
 
 # Core FastAPI Instance (MUST BE NAMED 'app')
 app = FastAPI(title="Smart Pharmacy System")
+
+# THIS MUST BE REGISTERED BEFORE ANY ROUTER
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Register all routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])

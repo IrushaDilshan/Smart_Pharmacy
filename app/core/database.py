@@ -2,11 +2,12 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 1. Database එක තියෙන තැන (URL එක) සඳහන් කිරීම.
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@db:5432/smart_pharmacy")
+# Default to SQLite for local development if DATABASE_URL is not provided (e.g. outside Docker)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./smart_pharmacy.db")
 
 # 2. Connection Engine එක සෑදීම
-engine = create_engine(DATABASE_URL)
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 
 # 3. Database එක සමඟ ගනුදෙනු කිරීමට සෙෂන් (Session) එකක් සෑදීම
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
